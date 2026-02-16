@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Globe Trotter — Lat & Long Challenge</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ocean: #1a3a5c;
+    --land: #4ecdc4;
+    --land-dark: #3ab5ad;
+    --sand: #f7d794;
+    --coral: #ff6b6b;
+    --white: #f8f9fa;
+    --gold: #feca57;
+    --green: #26de81;
+    --purple: #a29bfe;
+    --bg: #0f2b44;
+    --card: rgba(255,255,255,0.08);
+    --card-solid: #1e4060;
+  }
+
+  body {
+    font-family: 'Fredoka', sans-serif;
+    background: var(--bg);
+    color: var(--white);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+      radial-gradient(ellipse at 20% 80%, rgba(78,205,196,0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(255,107,107,0.06) 0%, transparent 50%);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .container {
+    position: relative; z-index: 1;
+    max-width: 950px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+
+  .header { text-align: center; padding: 20px 0 14px; }
+  .header h1 {
+    font-size: 2.4em; font-weight: 700;
+    background: linear-gradient(135deg, var(--land), var(--sand), var(--coral));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    letter-spacing: -1px;
+  }
+  .header h1 .gi { display: inline-block; -webkit-text-fill-color: initial; animation: spin 8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .header p { font-size: 1em; color: rgba(255,255,255,0.45); margin-top: 4px; }
+
+  .score-bar { display: flex; justify-content: center; gap: 20px; margin: 10px 0 18px; flex-wrap: wrap; }
+  .score-item {
+    display: flex; align-items: center; gap: 7px;
+    font-family: 'Space Mono', monospace; font-size: 0.9em;
+    background: var(--card); padding: 7px 16px; border-radius: 30px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .score-item .label { color: rgba(255,255,255,0.5); }
+  .score-item .value { font-weight: 700; color: var(--gold); }
+  .score-item .value.streak { color: var(--coral); }
+  .score-item .value.level { color: var(--land); }
+
+  .mode-selector { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  .mode-btn {
+    background: var(--card); border: 2px solid rgba(255,255,255,0.08);
+    color: var(--white); padding: 14px 10px; border-radius: 14px;
+    cursor: pointer; font-family: 'Fredoka', sans-serif; font-size: 0.92em;
+    font-weight: 500; transition: all 0.3s; text-align: center;
+  }
+  .mode-btn:hover { border-color: var(--land); background: rgba(78,205,196,0.1); transform: translateY(-2px); }
+  .mode-btn.active { border-color: var(--land); background: rgba(78,205,196,0.15); box-shadow: 0 0 20px rgba(78,205,196,0.12); }
+  .mode-btn .mode-icon { font-size: 1.5em; display: block; margin-bottom: 4px; }
+  .mode-btn .mode-label { display: block; font-size: 0.78em; color: rgba(255,255,255,0.45); margin-top: 2px; }
+
+  .teaching-box {
+    background: rgba(162,155,254,0.08); border: 1px solid rgba(162,155,254,0.2);
+    border-radius: 14px; padding: 18px; margin-bottom: 18px;
+  }
+  .teaching-box h3 { color: var(--purple); font-size: 1em; margin-bottom: 8px; }
+  .teaching-box p { color: rgba(255,255,255,0.6); font-size: 0.88em; line-height: 1.55; }
+  .teaching-box .kp { color: var(--sand); font-weight: 600; }
+
+  .progress-bar { width: 100%; height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; margin-bottom: 18px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--land), var(--gold)); border-radius: 3px; transition: width 0.5s ease; }
+
+  .game-card {
+    background: linear-gradient(145deg, var(--card-solid), #162f4d);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px; padding: 28px; margin-bottom: 18px;
+    box-shadow: 0 16px 50px rgba(0,0,0,0.3); position: relative; overflow: visible;
+  }
+  .game-card::before {
+    content: ''; position: absolute;
+    top: -2px; left: -2px; right: -2px; bottom: -2px;
+    border-radius: 21px;
+    background: linear-gradient(135deg, rgba(78,205,196,0.25), transparent, rgba(255,107,107,0.15));
+    z-index: -1; opacity: 0.5;
+  }
+  .q-num { font-family: 'Space Mono', monospace; font-size: 0.75em; color: rgba(255,255,255,0.3); margin-bottom: 10px; letter-spacing: 2px; text-transform: uppercase; }
+  .q-text { font-size: 1.25em; font-weight: 600; line-height: 1.4; margin-bottom: 6px; }
+  .q-text .hl { color: var(--gold); font-family: 'Space Mono', monospace; font-weight: 700; background: rgba(254,202,87,0.12); padding: 2px 7px; border-radius: 5px; }
+  .q-text .city { color: var(--land); }
+  .hint { font-size: 0.85em; color: rgba(255,255,255,0.4); margin-bottom: 18px; font-style: italic; }
+
+  .map-outer {
+    position: relative;
+    margin-bottom: 16px;
+  }
+
+  /* Left axis (Latitude) */
+  .axis-left {
+    position: absolute;
+    left: 0; top: 0; bottom: 28px;
+    width: 52px;
+    z-index: 10;
+    pointer-events: none;
+    overflow: hidden;
+    background: rgba(15, 43, 68, 0.95);
+    border-right: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px 0 0 0;
+  }
+  .axis-left .axis-title {
+    position: absolute;
+    top: 50%; left: 2px;
+    transform: rotate(-90deg) translateX(-50%);
+    transform-origin: 0 0;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.7em;
+    font-weight: 600;
+    color: var(--land);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+  .axis-label-lat {
+    position: absolute;
+    right: 6px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72em;
+    font-weight: 700;
+    color: var(--sand);
+    text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+    white-space: nowrap;
+    pointer-events: none;
+    transform: translateY(-50%);
+    opacity: 0.9;
+  }
+  .axis-label-lat.eq {
+    color: var(--coral);
+    font-size: 0.78em;
+  }
+
+  /* Bottom axis (Longitude) */
+  .axis-bottom {
+    position: absolute;
+    left: 52px; right: 0; bottom: 0;
+    height: 28px;
+    z-index: 10;
+    pointer-events: none;
+    overflow: hidden;
+    background: rgba(15, 43, 68, 0.95);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0 0 14px 0;
+  }
+  .axis-bottom .axis-title {
+    position: absolute;
+    bottom: 1px; right: 10px;
+    font-family: 'Fredoka', sans-serif;
+    font-size: 0.7em;
+    font-weight: 600;
+    color: var(--land);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+  .axis-label-lng {
+    position: absolute;
+    top: 4px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72em;
+    font-weight: 700;
+    color: var(--sand);
+    text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+    white-space: nowrap;
+    pointer-events: none;
+    transform: translateX(-50%);
+    opacity: 0.9;
+  }
+  .axis-label-lng.pm {
+    color: var(--coral);
+    font-size: 0.78em;
+  }
+
+  /* Corner block */
+  .axis-corner {
+    position: absolute;
+    left: 0; bottom: 0;
+    width: 52px; height: 28px;
+    background: rgba(15, 43, 68, 0.95);
+    z-index: 11;
+    pointer-events: none;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    border-right: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0 0 0 12px;
+  }
+
+  .map-wrap {
+    border-radius: 14px; overflow: hidden;
+    border: 2px solid rgba(255,255,255,0.1);
+    position: relative;
+    margin-left: 52px;
+    margin-bottom: 0;
+  }
+  #game-map { height: 370px; width: 100%; z-index: 1; }
+
+  .map-instruction {
+    position: absolute; top: 10px; left: calc(50% + 26px); transform: translateX(-50%);
+    z-index: 1000; background: rgba(15,43,68,0.92); color: var(--sand);
+    padding: 7px 18px; border-radius: 20px; font-size: 0.82em;
+    font-family: 'Space Mono', monospace; pointer-events: none;
+    border: 1px solid rgba(254,202,87,0.25); white-space: nowrap;
+  }
+
+  .coord-readout {
+    position: absolute; bottom: 38px; left: calc(50% + 26px); transform: translateX(-50%);
+    z-index: 1000; background: rgba(15,43,68,0.92); color: var(--white);
+    padding: 7px 16px; border-radius: 20px; font-size: 0.82em;
+    font-family: 'Space Mono', monospace; pointer-events: none;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .option-btn {
+    background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1);
+    color: var(--white); padding: 14px 18px; border-radius: 12px;
+    cursor: pointer; font-family: 'Fredoka', sans-serif; font-size: 1em;
+    font-weight: 500; transition: all 0.25s; text-align: left; position: relative;
+  }
+  .option-btn:hover:not(.disabled) { border-color: var(--land); background: rgba(78,205,196,0.1); transform: scale(1.02); }
+  .option-btn.correct { border-color: var(--green); background: rgba(38,222,129,0.15); animation: pop 0.5s ease; }
+  .option-btn.wrong { border-color: var(--coral); background: rgba(255,107,107,0.15); animation: shake 0.4s ease; }
+  .option-btn.disabled { cursor: default; opacity: 0.55; }
+  .option-btn .ol { font-family: 'Space Mono', monospace; font-size: 0.72em; color: rgba(255,255,255,0.3); margin-bottom: 2px; display: block; }
+  @keyframes pop { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+
+  .input-area { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .coord-group { flex: 1; min-width: 170px; }
+  .coord-group label {
+    display: block; font-size: 0.75em; color: rgba(255,255,255,0.4);
+    margin-bottom: 5px; font-family: 'Space Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .coord-row { display: flex; gap: 5px; align-items: center; }
+  .coord-input {
+    background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.12);
+    color: var(--white); padding: 11px 12px; border-radius: 10px;
+    font-family: 'Space Mono', monospace; font-size: 1.05em; width: 85px; text-align: center;
+    transition: border-color 0.3s;
+  }
+  .coord-input:focus { outline: none; border-color: var(--land); background: rgba(78,205,196,0.08); }
+  .dir-toggle {
+    background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.12);
+    color: var(--white); padding: 11px 12px; border-radius: 10px;
+    font-family: 'Fredoka', sans-serif; font-size: 0.95em; font-weight: 600;
+    cursor: pointer; transition: all 0.25s; min-width: 42px; text-align: center;
+  }
+  .dir-toggle:hover { border-color: var(--sand); background: rgba(247,215,148,0.1); }
+
+  .submit-btn {
+    background: linear-gradient(135deg, var(--land), var(--land-dark));
+    border: none; color: var(--bg); padding: 11px 26px; border-radius: 10px;
+    font-family: 'Fredoka', sans-serif; font-size: 1em; font-weight: 600;
+    cursor: pointer; transition: all 0.25s;
+  }
+  .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(78,205,196,0.3); }
+  .submit-btn:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
+
+  .feedback { margin-top: 16px; padding: 16px 20px; border-radius: 12px; font-size: 0.95em; display: none; animation: slideUp 0.35s ease; }
+  .feedback.show { display: block; }
+  .feedback.correct { background: rgba(38,222,129,0.12); border: 1px solid rgba(38,222,129,0.3); color: var(--green); }
+  .feedback.wrong { background: rgba(255,107,107,0.12); border: 1px solid rgba(255,107,107,0.3); color: var(--coral); }
+  .feedback .explanation { display: block; margin-top: 5px; font-size: 0.86em; color: rgba(255,255,255,0.5); }
+  @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+  .next-btn {
+    display: none; margin: 16px auto 0;
+    background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.15);
+    color: var(--white); padding: 13px 32px; border-radius: 12px;
+    font-family: 'Fredoka', sans-serif; font-size: 1em; font-weight: 600;
+    cursor: pointer; transition: all 0.25s;
+  }
+  .next-btn.show { display: block; }
+  .next-btn:hover { background: rgba(255,255,255,0.15); transform: translateY(-2px); }
+
+  .results { text-align: center; padding: 35px 20px; }
+  .results .big-score {
+    font-size: 3.5em; font-weight: 700;
+    background: linear-gradient(135deg, var(--gold), var(--coral));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .results .grade { font-size: 1.3em; margin: 10px 0 20px; color: var(--land); }
+  .results .stats { display: flex; justify-content: center; gap: 28px; margin: 20px 0; flex-wrap: wrap; }
+  .results .stat { text-align: center; }
+  .results .stat .num { font-size: 1.8em; font-weight: 700; font-family: 'Space Mono', monospace; }
+  .results .stat .desc { font-size: 0.82em; color: rgba(255,255,255,0.4); }
+  .play-again-btn {
+    background: linear-gradient(135deg, var(--land), var(--land-dark));
+    border: none; color: var(--bg); padding: 14px 36px; border-radius: 12px;
+    font-family: 'Fredoka', sans-serif; font-size: 1.1em; font-weight: 600;
+    cursor: pointer; transition: all 0.25s; margin-top: 12px;
+  }
+  .play-again-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(78,205,196,0.3); }
+
+  .leaflet-container { background: #aad3df !important; }
+
+  .leaflet-popup-content-wrapper {
+    background: #1e4060 !important;
+    color: var(--white) !important;
+    border-radius: 12px !important;
+    font-family: 'Fredoka', sans-serif !important;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4) !important;
+  }
+  .leaflet-popup-tip { background: #1e4060 !important; }
+  .leaflet-popup-content { margin: 10px 14px !important; font-size: 0.9em; line-height: 1.5; }
+
+  /* iPad landscape (1024px - 1366px) */
+  @media (min-width: 768px) and (max-width: 1366px) {
+    .container { max-width: 100%; padding: 12px 20px; }
+    .header { padding: 12px 0 8px; }
+    .header h1 { font-size: 2.2em; }
+    .header p { font-size: 0.95em; margin-top: 2px; }
+    .score-bar { margin: 6px 0 12px; gap: 14px; }
+    .score-item { padding: 8px 18px; font-size: 0.95em; }
+    .mode-selector { margin-bottom: 12px; gap: 8px; }
+    .mode-btn { padding: 12px 8px; font-size: 0.95em; min-height: 70px; }
+    .mode-btn .mode-icon { font-size: 1.6em; }
+    .teaching-box { padding: 14px; margin-bottom: 12px; }
+    .teaching-box h3 { font-size: 0.95em; margin-bottom: 5px; }
+    .teaching-box p { font-size: 0.84em; line-height: 1.45; }
+    .progress-bar { margin-bottom: 12px; }
+    .game-card { padding: 22px; margin-bottom: 12px; border-radius: 16px; }
+    .q-text { font-size: 1.2em; }
+    .hint { font-size: 0.88em; margin-bottom: 14px; }
+    #game-map { height: 420px; }
+    .option-btn { padding: 16px 18px; font-size: 1.05em; min-height: 56px; border-radius: 14px; }
+    .coord-input { padding: 14px 12px; font-size: 1.1em; width: 95px; }
+    .dir-toggle { padding: 14px 14px; font-size: 1em; }
+    .submit-btn { padding: 14px 30px; font-size: 1.05em; }
+    .next-btn { padding: 16px 40px; font-size: 1.05em; }
+    .feedback { padding: 14px 18px; font-size: 0.95em; }
+  }
+
+  /* iPad portrait (768px - 1024px) */
+  @media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+    #game-map { height: 380px; }
+    .options-grid { gap: 12px; }
+    .option-btn { padding: 18px 20px; font-size: 1.08em; }
+  }
+
+  /* Smaller tablets and large phones (600px - 768px) */
+  @media (min-width: 600px) and (max-width: 767px) {
+    .container { padding: 12px; }
+    .header { padding: 10px 0 6px; }
+    .header h1 { font-size: 1.9em; }
+    .score-bar { margin: 6px 0 10px; }
+    .teaching-box { padding: 12px; margin-bottom: 10px; }
+    .game-card { padding: 20px; }
+    #game-map { height: 320px; }
+    .option-btn { padding: 14px 16px; font-size: 1em; }
+  }
+
+  /* Phones (under 600px) */
+  @media (max-width: 599px) {
+    .container { padding: 10px; }
+    .header { padding: 8px 0 4px; }
+    .header h1 { font-size: 1.6em; }
+    .header p { font-size: 0.85em; }
+    .score-bar { margin: 4px 0 10px; gap: 10px; }
+    .score-item { padding: 6px 12px; font-size: 0.82em; }
+    .mode-selector { grid-template-columns: 1fr; gap: 6px; margin-bottom: 10px; }
+    .mode-btn { padding: 10px 8px; min-height: auto; }
+    .mode-btn .mode-icon { font-size: 1.3em; display: inline; margin-right: 6px; margin-bottom: 0; }
+    .mode-btn .mode-label { display: none; }
+    .teaching-box { padding: 12px; margin-bottom: 10px; }
+    .teaching-box h3 { font-size: 0.9em; }
+    .teaching-box p { font-size: 0.8em; }
+    .progress-bar { margin-bottom: 10px; }
+    .game-card { padding: 16px; margin-bottom: 10px; border-radius: 14px; }
+    .q-text { font-size: 1.05em; }
+    .hint { font-size: 0.8em; margin-bottom: 12px; }
+    .options-grid { grid-template-columns: 1fr; gap: 8px; }
+    .option-btn { padding: 14px 16px; font-size: 0.95em; }
+    #game-map { height: 250px; }
+    .axis-left { width: 42px; }
+    .map-wrap { margin-left: 42px; }
+    .axis-corner { width: 42px; }
+    .axis-label-lat { font-size: 0.6em; }
+    .axis-label-lng { font-size: 0.6em; }
+    .map-instruction { font-size: 0.68em; left: calc(50% + 21px); padding: 5px 12px; }
+    .coord-readout { left: calc(50% + 21px); font-size: 0.68em; }
+    .input-area { flex-direction: column; }
+    .coord-group { min-width: unset; width: 100%; }
+    .coord-input { padding: 12px; font-size: 1em; width: 80px; }
+    .dir-toggle { padding: 12px; }
+    .submit-btn { width: 100%; padding: 14px; }
+    .next-btn { width: 100%; padding: 14px 20px; }
+    .feedback { font-size: 0.88em; }
+    .results .big-score { font-size: 2.8em; }
+    .results .grade { font-size: 1.1em; }
+  }
+
+  /* Touch device optimizations */
+  @media (pointer: coarse) {
+    .option-btn { min-height: 52px; }
+    .mode-btn { min-height: 64px; }
+    .submit-btn { min-height: 48px; }
+    .next-btn { min-height: 48px; }
+    .dir-toggle { min-width: 48px; min-height: 48px; }
+    .leaflet-control-zoom a {
+      width: 36px !important;
+      height: 36px !important;
+      line-height: 36px !important;
+      font-size: 20px !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="container" id="app">
+  <div class="header">
+    <h1><span class="gi">🌍</span> Globe Trotter</h1>
+    <p>Master Latitude & Longitude</p>
+  </div>
+
+  <div class="score-bar">
+    <div class="score-item"><span class="label">Score</span><span class="value" id="score">0</span></div>
+    <div class="score-item"><span class="label">Streak</span><span class="value streak" id="streak">0 🔥</span></div>
+    <div class="score-item"><span class="label">Round</span><span class="value level" id="round">1 / 10</span></div>
+  </div>
+
+  <div class="mode-selector">
+    <button class="mode-btn active" onclick="setMode('read')" id="mode-read">
+      <span class="mode-icon">📖</span>Read Coords
+      <span class="mode-label">Find the marked place</span>
+    </button>
+    <button class="mode-btn" onclick="setMode('write')" id="mode-write">
+      <span class="mode-icon">✍️</span>Write Coords
+      <span class="mode-label">Read coords off the map</span>
+    </button>
+    <button class="mode-btn" onclick="setMode('locate')" id="mode-locate">
+      <span class="mode-icon">📍</span>Locate It
+      <span class="mode-label">Click the right spot</span>
+    </button>
+  </div>
+
+  <div class="teaching-box" id="teaching-box">
+    <h3>💡 Quick Reminder</h3>
+    <p id="teaching-text">
+      <span class="kp">Latitude</span> = how far <span class="kp">north or south</span> of the Equator (0°). Range: 90°N to 90°S. Lines run horizontally.<br><br>
+      <span class="kp">Longitude</span> = how far <span class="kp">east or west</span> of the Prime Meridian (0°). Range: 180°E to 180°W. Lines run vertically.<br><br>
+      Remember: <span class="kp">Lat = Flat</span> (horizontal), <span class="kp">Long = Long way round</span> (vertical). Always write latitude first!
+    </p>
+  </div>
+
+  <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+
+  <div id="game-area"></div>
+</div>
+
+<script>
+const PLACES = [
+  { name: "London", country: "United Kingdom", lat: 51.5, lng: -0.1 },
+  { name: "Paris", country: "France", lat: 48.9, lng: 2.3 },
+  { name: "Cairo", country: "Egypt", lat: 30.0, lng: 31.2 },
+  { name: "Tokyo", country: "Japan", lat: 35.7, lng: 139.7 },
+  { name: "Sydney", country: "Australia", lat: -33.9, lng: 151.2 },
+  { name: "New York", country: "USA", lat: 40.7, lng: -74.0 },
+  { name: "Rio de Janeiro", country: "Brazil", lat: -22.9, lng: -43.2 },
+  { name: "Mumbai", country: "India", lat: 19.1, lng: 72.9 },
+  { name: "Cape Town", country: "South Africa", lat: -33.9, lng: 18.4 },
+  { name: "Beijing", country: "China", lat: 39.9, lng: 116.4 },
+  { name: "Moscow", country: "Russia", lat: 55.8, lng: 37.6 },
+  { name: "Mexico City", country: "Mexico", lat: 19.4, lng: -99.1 },
+  { name: "Nairobi", country: "Kenya", lat: -1.3, lng: 36.8 },
+  { name: "Rome", country: "Italy", lat: 41.9, lng: 12.5 },
+  { name: "Bangkok", country: "Thailand", lat: 13.8, lng: 100.5 },
+  { name: "Lima", country: "Peru", lat: -12.0, lng: -77.0 },
+  { name: "Berlin", country: "Germany", lat: 52.5, lng: 13.4 },
+  { name: "Jakarta", country: "Indonesia", lat: -6.2, lng: 106.8 },
+  { name: "Buenos Aires", country: "Argentina", lat: -34.6, lng: -58.4 },
+  { name: "Lagos", country: "Nigeria", lat: 6.5, lng: 3.4 },
+  { name: "Dubai", country: "UAE", lat: 25.2, lng: 55.3 },
+  { name: "Singapore", country: "Singapore", lat: 1.4, lng: 103.8 },
+  { name: "Toronto", country: "Canada", lat: 43.7, lng: -79.4 },
+  { name: "Athens", country: "Greece", lat: 38.0, lng: 23.7 },
+  { name: "Reykjavik", country: "Iceland", lat: 64.1, lng: -21.9 },
+];
+
+let state = { mode:'read', score:0, streak:0, bestStreak:0, round:0, totalRounds:10, questions:[], answered:false };
+let map = null;
+let markers = [];
+let userMarker = null;
+let gridLayer = null;
+
+function fmt(lat, lng) {
+  const la = Math.abs(lat).toFixed(1), lo = Math.abs(lng).toFixed(1);
+  return `${la}\u00b0${lat >= 0 ? 'N' : 'S'}, ${lo}\u00b0${lng >= 0 ? 'E' : 'W'}`;
+}
+function shuffle(a) { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; }
+function pick(arr, n) { return shuffle(arr).slice(0, n); }
+
+function makePinIcon(color) {
+  return L.divIcon({
+    className: '',
+    html: '<svg width="30" height="40" viewBox="0 0 30 40"><path d="M15 0C6.716 0 0 6.716 0 15c0 10.5 15 25 15 25s15-14.5 15-25C30 6.716 23.284 0 15 0z" fill="' + color + '"/><circle cx="15" cy="14" r="6" fill="white" opacity="0.9"/></svg>',
+    iconSize: [30, 40],
+    iconAnchor: [15, 40],
+    popupAnchor: [0, -42]
+  });
+}
+
+function destroyMap() {
+  if (map) { map.remove(); map = null; }
+  markers = [];
+  userMarker = null;
+  gridLayer = null;
+}
+
+function initMap(containerId, opts) {
+  destroyMap();
+  opts = opts || {};
+  map = L.map(containerId, {
+    center: opts.center || [20, 0],
+    zoom: opts.zoom || 2,
+    minZoom: 2,
+    maxZoom: 10,
+    worldCopyJump: true,
+    zoomControl: true,
+  });
+
+  // Try multiple tile servers - schools often block some but not others
+  var tileSources = [
+    { url: 'https://mt{s}.google.com/vt/lyrs=r&x={x}&y={y}&z={z}', opts: { subdomains: '0123', attribution: 'Map data &copy; Google', maxZoom: 19 } },
+    { url: 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png', opts: { attribution: '&copy; Wikimedia', maxZoom: 19 } },
+    { url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', opts: { attribution: '&copy; OpenStreetMap', subdomains: 'abc', maxZoom: 19 } },
+    { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', opts: { attribution: '&copy; Esri', maxZoom: 19 } }
+  ];
+
+  var tileLoaded = false;
+  function tryTileSource(index) {
+    if (index >= tileSources.length || tileLoaded) return;
+    var src = tileSources[index];
+    var layer = L.tileLayer(src.url, src.opts).addTo(map);
+    layer.on('tileerror', function() {
+      if (!tileLoaded) {
+        map.removeLayer(layer);
+        tryTileSource(index + 1);
+      }
+    });
+    layer.on('tileload', function() {
+      tileLoaded = true;
+    });
+  }
+  tryTileSource(0);
+
+  // Equator (always visible)
+  L.polyline([[0, -180], [0, 180]], { color: '#cc0000', weight: 3, opacity: 0.8, dashArray: '10,8' }).addTo(map);
+  // Prime Meridian (always visible)
+  L.polyline([[-90, 0], [90, 0]], { color: '#cc0000', weight: 3, opacity: 0.8, dashArray: '10,8' }).addTo(map);
+
+  // Dynamic grid layer - redrawn on zoom/pan
+  gridLayer = L.layerGroup().addTo(map);
+
+  // Update axis labels and grid on move/zoom
+  map.on('move zoom moveend zoomend', updateAxisLabels);
+  setTimeout(updateAxisLabels, 100);
+
+  return map;
+}
+
+function updateAxisLabels() {
+  if (!map) return;
+  var bounds = map.getBounds();
+  var mapEl = map.getContainer();
+  var mapH = mapEl.offsetHeight;
+  var mapW = mapEl.offsetWidth;
+
+  // Calculate how many degrees are visible
+  var latRange = bounds.getNorth() - bounds.getSouth();
+  var lngRange = bounds.getEast() - bounds.getWest();
+
+  // Pick interval so labels are nicely spaced
+  // Available intervals from fine to coarse
+  var intervals = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60];
+
+  // For latitude: pick finest interval that gives at most ~8-12 labels
+  var maxLatLabels = Math.max(4, Math.floor(mapH / 45));
+  var latInterval = 60;
+  for (var i = 0; i < intervals.length; i++) {
+    var count = latRange / intervals[i];
+    if (count <= maxLatLabels) {
+      latInterval = intervals[i];
+      break;
+    }
+  }
+
+  // For longitude: same logic
+  var maxLngLabels = Math.max(4, Math.floor(mapW / 65));
+  var lngInterval = 60;
+  for (var j = 0; j < intervals.length; j++) {
+    var count2 = lngRange / intervals[j];
+    if (count2 <= maxLngLabels) {
+      lngInterval = intervals[j];
+      break;
+    }
+  }
+
+  // --- Draw dynamic grid lines matching the axis intervals ---
+  if (gridLayer) {
+    gridLayer.clearLayers();
+
+    // Latitude grid lines
+    var gridSouth = Math.floor(bounds.getSouth() / latInterval) * latInterval;
+    var gridNorth = Math.ceil(bounds.getNorth() / latInterval) * latInterval;
+    for (var glat = gridSouth; glat <= gridNorth; glat = Math.round((glat + latInterval) * 100) / 100) {
+      if (glat < -90 || glat > 90 || glat === 0) continue;
+      L.polyline([[glat, -180], [glat, 180]], {
+        color: '#1a1a2e', weight: 1.2, opacity: 0.55
+      }).addTo(gridLayer);
+    }
+
+    // Longitude grid lines
+    var gridWest = Math.floor(bounds.getWest() / lngInterval) * lngInterval;
+    var gridEast = Math.ceil(bounds.getEast() / lngInterval) * lngInterval;
+    for (var glng = gridWest; glng <= gridEast; glng = Math.round((glng + lngInterval) * 100) / 100) {
+      if (glng < -180 || glng > 180 || glng === 0) continue;
+      L.polyline([[-90, glng], [90, glng]], {
+        color: '#1a1a2e', weight: 1.2, opacity: 0.55
+      }).addTo(gridLayer);
+    }
+  }
+
+  // Helper: format a degree value with appropriate decimals
+  function fmtDeg(val, isLat) {
+    var abs = Math.abs(val);
+    var str;
+    if (abs === Math.floor(abs)) str = abs.toFixed(0);
+    else str = abs.toFixed(1);
+    if (val === 0) return '0\u00b0';
+    var dir = isLat ? (val > 0 ? 'N' : 'S') : (val > 0 ? 'E' : 'W');
+    return str + '\u00b0' + dir;
+  }
+
+  // --- Latitude (left axis) ---
+  var leftEl = document.getElementById('axis-left-labels');
+  if (!leftEl) return;
+  leftEl.innerHTML = '';
+
+  var south = Math.floor(bounds.getSouth() / latInterval) * latInterval;
+  var north = Math.ceil(bounds.getNorth() / latInterval) * latInterval;
+
+  for (var lat = south; lat <= north; lat = Math.round((lat + latInterval) * 100) / 100) {
+    if (lat < -90 || lat > 90) continue;
+    var pt = map.latLngToContainerPoint([lat, bounds.getCenter().lng]);
+    if (pt.y < 5 || pt.y > mapH - 5) continue;
+
+    var label = document.createElement('div');
+    label.className = 'axis-label-lat' + (lat === 0 ? ' eq' : '');
+    label.style.top = pt.y + 'px';
+    label.textContent = fmtDeg(lat, true);
+    leftEl.appendChild(label);
+  }
+
+  // --- Longitude (bottom axis) ---
+  var bottomEl = document.getElementById('axis-bottom-labels');
+  if (!bottomEl) return;
+  bottomEl.innerHTML = '';
+
+  var west = Math.floor(bounds.getWest() / lngInterval) * lngInterval;
+  var east = Math.ceil(bounds.getEast() / lngInterval) * lngInterval;
+
+  for (var lng = west; lng <= east; lng = Math.round((lng + lngInterval) * 100) / 100) {
+    if (lng < -180 || lng > 180) continue;
+    var pt2 = map.latLngToContainerPoint([bounds.getCenter().lat, lng]);
+    if (pt2.x < 10 || pt2.x > mapW - 10) continue;
+
+    var label2 = document.createElement('div');
+    label2.className = 'axis-label-lng' + (lng === 0 ? ' pm' : '');
+    label2.style.left = pt2.x + 'px';
+    label2.textContent = fmtDeg(lng, false);
+    bottomEl.appendChild(label2);
+  }
+}
+
+function mapHTML(instruction, showCoordReadout) {
+  return '<div class="map-outer">' +
+    '<div class="axis-left" id="axis-left"><div class="axis-title">LATITUDE</div><div id="axis-left-labels"></div></div>' +
+    '<div class="axis-bottom" id="axis-bottom"><div id="axis-bottom-labels"></div><div class="axis-title">LONGITUDE</div></div>' +
+    '<div class="axis-corner"></div>' +
+    '<div class="map-wrap">' +
+      '<div id="game-map"></div>' +
+      '<div class="map-instruction">' + instruction + '</div>' +
+      (showCoordReadout ? '<div class="coord-readout" id="coord-readout">Hover to see coordinates</div>' : '') +
+    '</div>' +
+  '</div>';
+}
+
+function addMarker(lat, lng, color, popupHTML) {
+  var m = L.marker([lat, lng], { icon: makePinIcon(color) }).addTo(map);
+  if (popupHTML) m.bindPopup(popupHTML);
+  markers.push(m);
+  return m;
+}
+
+function generateQuestions() {
+  var selected = pick(PLACES, state.totalRounds);
+  state.questions = selected.map(function(place) {
+    if (state.mode === 'read') {
+      var wrong = pick(PLACES.filter(function(p) { return p.name !== place.name; }), 3);
+      return { place: place, options: shuffle([place].concat(wrong)), type: 'read' };
+    } else if (state.mode === 'write') {
+      return { place: place, type: 'write' };
+    } else {
+      return { place: place, type: 'locate' };
+    }
+  });
+}
+
+function updateUI() {
+  document.getElementById('score').textContent = state.score;
+  document.getElementById('streak').textContent = state.streak + ' \uD83D\uDD25';
+  document.getElementById('round').textContent = (state.round + 1) + ' / ' + state.totalRounds;
+  document.getElementById('progress-fill').style.width = ((state.round / state.totalRounds) * 100) + '%';
+}
+
+function renderQuestion() {
+  if (state.round >= state.totalRounds) { renderResults(); return; }
+  state.answered = false;
+  updateUI();
+  var q = state.questions[state.round];
+  if (q.type === 'read') renderRead(q);
+  else if (q.type === 'write') renderWrite(q);
+  else renderLocate(q);
+}
+
+// MODE 1: READ COORDS
+// Students are given coordinates. They must use the map axes to locate that position, then pick the city.
+function renderRead(q) {
+  var letters = ['A', 'B', 'C', 'D'];
+  var area = document.getElementById('game-area');
+  var coord = fmt(q.place.lat, q.place.lng);
+
+  // Each option shows city name + coordinates so students can cross-reference on the map
+  var optionsHTML = '';
+  for (var i = 0; i < q.options.length; i++) {
+    var o = q.options[i];
+    optionsHTML += '<button class="option-btn" onclick="answerRead(' + i + ')" id="opt-' + i + '">' +
+      '<span class="ol">' + letters[i] + '</span>' +
+      o.name + ', ' + o.country +
+      '</button>';
+  }
+
+  area.innerHTML =
+    '<div class="game-card">' +
+      '<div class="q-num">Question ' + (state.round + 1) + ' of ' + state.totalRounds + '</div>' +
+      '<div class="q-text">Which city is at <span class="hl">' + coord + '</span> ?</div>' +
+      '<div class="hint">Use the grid lines and labels on the map to find this location. The red dashed lines mark the Equator (0\u00b0 lat) and Prime Meridian (0\u00b0 lng). Zoom in for more detail!</div>' +
+      mapHTML('Use the grid lines to find ' + coord, false) +
+      '<div class="options-grid">' + optionsHTML + '</div>' +
+      '<div class="feedback" id="feedback"></div>' +
+      '<button class="next-btn" id="next-btn" onclick="nextQ()">Next Question \u2192</button>' +
+    '</div>';
+
+  requestAnimationFrame(function() {
+    // Start zoomed out so students have to navigate using the axes
+    initMap('game-map', { center: [20, 0], zoom: 2 });
+  });
+}
+
+function answerRead(index) {
+  if (state.answered) return;
+  state.answered = true;
+  var q = state.questions[state.round];
+  var correct = q.options[index].name === q.place.name;
+  for (var i = 0; i < q.options.length; i++) {
+    var btn = document.getElementById('opt-' + i);
+    btn.classList.add('disabled');
+    if (q.options[i].name === q.place.name) btn.classList.add('correct');
+    else if (i === index) btn.classList.add('wrong');
+  }
+  // After answering, drop a pin on the correct location and fly to it
+  var m = addMarker(q.place.lat, q.place.lng, '#26de81',
+    '<strong style="color:#26de81">' + q.place.name + ', ' + q.place.country + '</strong><br><span style="color:#feca57;font-family:Space Mono,monospace;">' + fmt(q.place.lat, q.place.lng) + '</span>');
+  map.flyTo([q.place.lat, q.place.lng], 5, { duration: 1.2 });
+  setTimeout(function() { m.openPopup(); }, 1300);
+  showFeedback(correct, q.place, '');
+}
+
+// MODE 2: WRITE COORDS
+function renderWrite(q) {
+  var area = document.getElementById('game-area');
+  area.innerHTML =
+    '<div class="game-card">' +
+      '<div class="q-num">Question ' + (state.round + 1) + ' of ' + state.totalRounds + '</div>' +
+      '<div class="q-text">Look at <span class="city">' + q.place.name + ', ' + q.place.country + '</span> on the map and write its coordinates!</div>' +
+      '<div class="hint">Use the grid lines to read the latitude and longitude where the pin is. The red dashed lines mark the Equator (0\u00b0 lat) and Prime Meridian (0\u00b0 lng). Within 5\u00b0 is correct!</div>' +
+      mapHTML('\uD83D\uDCCD ' + q.place.name + ' is pinned \u2014 read the grid lines', false) +
+      '<div class="input-area">' +
+        '<div class="coord-group"><label>Latitude</label><div class="coord-row"><input type="number" class="coord-input" id="lat-input" placeholder="0.0" min="0" max="90" step="0.1"><button class="dir-toggle" id="lat-dir" onclick="toggleDir(\'lat-dir\',\'N\',\'S\')">N</button></div></div>' +
+        '<div class="coord-group"><label>Longitude</label><div class="coord-row"><input type="number" class="coord-input" id="lng-input" placeholder="0.0" min="0" max="180" step="0.1"><button class="dir-toggle" id="lng-dir" onclick="toggleDir(\'lng-dir\',\'E\',\'W\')">E</button></div></div>' +
+        '<button class="submit-btn" id="write-submit" onclick="answerWrite()">Check \u2713</button>' +
+      '</div>' +
+      '<div class="feedback" id="feedback"></div>' +
+      '<button class="next-btn" id="next-btn" onclick="nextQ()">Next Question \u2192</button>' +
+    '</div>';
+
+  requestAnimationFrame(function() {
+    initMap('game-map', { center: [q.place.lat, q.place.lng], zoom: 4 });
+    addMarker(q.place.lat, q.place.lng, '#ff6b6b',
+      '<strong style="color:#4ecdc4">' + q.place.name + '</strong><br><span style="font-size:0.85em;color:rgba(255,255,255,0.5)">Read the coordinates from the grid!</span>');
+  });
+
+  setTimeout(function() {
+    var latIn = document.getElementById('lat-input');
+    var lngIn = document.getElementById('lng-input');
+    if (latIn) latIn.addEventListener('keydown', function(e) { if (e.key === 'Enter') answerWrite(); });
+    if (lngIn) lngIn.addEventListener('keydown', function(e) { if (e.key === 'Enter') answerWrite(); });
+  }, 100);
+}
+
+function answerWrite() {
+  if (state.answered) return;
+  var latVal = parseFloat(document.getElementById('lat-input').value);
+  var lngVal = parseFloat(document.getElementById('lng-input').value);
+  if (isNaN(latVal) || isNaN(lngVal)) return;
+  state.answered = true;
+
+  var latDir = document.getElementById('lat-dir').textContent;
+  var lngDir = document.getElementById('lng-dir').textContent;
+  var userLat = latDir === 'S' ? -latVal : latVal;
+  var userLng = lngDir === 'W' ? -lngVal : lngVal;
+
+  var q = state.questions[state.round];
+  var correct = Math.abs(userLat - q.place.lat) <= 5 && Math.abs(userLng - q.place.lng) <= 5;
+
+  document.getElementById('lat-input').disabled = true;
+  document.getElementById('lng-input').disabled = true;
+  document.getElementById('write-submit').disabled = true;
+
+  if (markers[0]) {
+    markers[0].setPopupContent(
+      '<strong style="color:#4ecdc4">' + q.place.name + '</strong><br><span style="color:#feca57;font-family:Space Mono,monospace;">' + fmt(q.place.lat, q.place.lng) + '</span>');
+    markers[0].openPopup();
+  }
+  showFeedback(correct, q.place, '');
+}
+
+// MODE 3: LOCATE IT
+function renderLocate(q) {
+  var coord = fmt(q.place.lat, q.place.lng);
+  var area = document.getElementById('game-area');
+  area.innerHTML =
+    '<div class="game-card">' +
+      '<div class="q-num">Question ' + (state.round + 1) + ' of ' + state.totalRounds + '</div>' +
+      '<div class="q-text">Click on the map to locate <span class="city">' + q.place.name + ', ' + q.place.country + '</span></div>' +
+      '<div class="hint">Its coordinates are <span style="color:#f7d794;font-family:Space Mono,monospace;font-style:normal;">' + coord + '</span> \u2014 use the grid lines and labels to find it!</div>' +
+      mapHTML('\uD83D\uDCCD Click where you think ' + q.place.name + ' is!', false) +
+      '<button class="submit-btn" id="map-submit" onclick="answerLocate()" style="display:none; margin-top:10px;">Submit Location \u2713</button>' +
+      '<div class="feedback" id="feedback"></div>' +
+      '<button class="next-btn" id="next-btn" onclick="nextQ()">Next Question \u2192</button>' +
+    '</div>';
+
+  requestAnimationFrame(function() {
+    initMap('game-map', { center: [20, 0], zoom: 2 });
+
+    map.on('click', function(e) {
+      if (state.answered) return;
+      if (userMarker) map.removeLayer(userMarker);
+      userMarker = L.marker([e.latlng.lat, e.latlng.lng], { icon: makePinIcon('#feca57') }).addTo(map);
+      document.getElementById('map-submit').style.display = 'block';
+    });
+  });
+}
+
+function answerLocate() {
+  if (state.answered || !userMarker) return;
+  state.answered = true;
+
+  var q = state.questions[state.round];
+  var userLL = userMarker.getLatLng();
+  var latDiff = Math.abs(userLL.lat - q.place.lat);
+  var lngDiff = Math.abs(userLL.lng - q.place.lng);
+  var correct = latDiff <= 10 && lngDiff <= 10;
+
+  var ans = addMarker(q.place.lat, q.place.lng, '#26de81',
+    '<strong style="color:#26de81">' + q.place.name + '</strong><br><span style="color:#feca57;font-family:Space Mono,monospace;">' + fmt(q.place.lat, q.place.lng) + '</span>');
+  ans.openPopup();
+
+  L.polyline([[userLL.lat, userLL.lng], [q.place.lat, q.place.lng]], {
+    color: correct ? '#26de81' : '#ff6b6b',
+    weight: 2, dashArray: '8,6', opacity: 0.7
+  }).addTo(map);
+
+  var bounds = L.latLngBounds([userLL, [q.place.lat, q.place.lng]]);
+  map.fitBounds(bounds, { padding: [60, 60], maxZoom: 6 });
+
+  document.getElementById('map-submit').style.display = 'none';
+
+  var dist = Math.round(map.distance(userLL, [q.place.lat, q.place.lng]) / 1000);
+  showFeedback(correct, q.place, 'You were ' + dist.toLocaleString() + ' km away.');
+}
+
+// SHARED
+function showFeedback(correct, place, extra) {
+  var fb = document.getElementById('feedback');
+  var coord = fmt(place.lat, place.lng);
+  if (correct) {
+    state.score += 10 + state.streak * 2;
+    state.streak++;
+    if (state.streak > state.bestStreak) state.bestStreak = state.streak;
+    fb.className = 'feedback correct show';
+    fb.innerHTML = '\u2705 Correct! ' + (state.streak > 1 ? state.streak + ' in a row! +' + (10 + (state.streak - 1) * 2) + ' pts' : '+10 pts') +
+      '<span class="explanation">' + place.name + ' is at ' + coord + '. ' + extra + '</span>';
+  } else {
+    state.streak = 0;
+    fb.className = 'feedback wrong show';
+    fb.innerHTML = '\u274C Not quite!' +
+      '<span class="explanation">The answer is ' + place.name + ', ' + place.country + ' at ' + coord + '. ' + extra + ' Remember: latitude (N/S) first, longitude (E/W) second.</span>';
+  }
+  document.getElementById('next-btn').classList.add('show');
+  updateUI();
+}
+
+function toggleDir(id, a, b) {
+  var btn = document.getElementById(id);
+  btn.textContent = btn.textContent === a ? b : a;
+}
+
+function nextQ() { state.round++; renderQuestion(); }
+
+function renderResults() {
+  destroyMap();
+  document.getElementById('progress-fill').style.width = '100%';
+  var pct = Math.round((state.score / (state.totalRounds * 28)) * 100);
+  var grade = '\uD83C\uDF1F Geography Legend!';
+  if (pct < 30) grade = '\uD83D\uDDFA\uFE0F Keep Exploring!';
+  else if (pct < 50) grade = '\uD83E\uDDED Getting There!';
+  else if (pct < 70) grade = '\u2708\uFE0F Seasoned Traveller!';
+  else if (pct < 90) grade = '\uD83C\uDF0D World Expert!';
+
+  document.getElementById('game-area').innerHTML =
+    '<div class="game-card results">' +
+      '<div class="big-score">' + state.score + '</div>' +
+      '<div class="grade">' + grade + '</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="num" style="color:#26de81">' + state.totalRounds + '</div><div class="desc">Questions</div></div>' +
+        '<div class="stat"><div class="num" style="color:#feca57">' + state.bestStreak + '</div><div class="desc">Best Streak</div></div>' +
+        '<div class="stat"><div class="num" style="color:#ff6b6b">' + state.score + '</div><div class="desc">Total Points</div></div>' +
+      '</div>' +
+      '<button class="play-again-btn" onclick="startGame()">Play Again \uD83D\uDD04</button>' +
+    '</div>';
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll('.mode-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('mode-' + mode).classList.add('active');
+
+  var t = document.getElementById('teaching-text');
+  if (mode === 'read') {
+    t.innerHTML = 'You\'ll be given <span class="kp">coordinates</span>. Use the <span class="kp">grid lines</span> and <span class="kp">labels</span> on the map to find that location, then pick the correct city.<br><br>The <span class="kp">red dashed lines</span> mark the Equator (0\u00b0 lat) and Prime Meridian (0\u00b0 lng). Zoom in for more precise grid lines!';
+  } else if (mode === 'write') {
+    t.innerHTML = 'A city is <span class="kp">pinned on the map</span>. Your job is to read its coordinates using the <span class="kp">grid lines</span> and type them in.<br><br>The grid lines show labelled degrees. The <span class="kp">red dashed lines</span> mark the Equator (0\u00b0 lat) and Prime Meridian (0\u00b0 lng). Zoom in for finer grid lines. Within <span class="kp">5\u00b0</span> counts as correct!';
+  } else {
+    t.innerHTML = 'You\'ll get a city name and its coordinates. <span class="kp">Click on the map</span> to place your pin where you think it is.<br><br>Use the <span class="kp">grid lines</span> to navigate. The red dashed lines are the Equator and Prime Meridian. Zoom in for finer grid lines. Within <span class="kp">10\u00b0</span> counts as correct!';
+  }
+  startGame();
+}
+
+function startGame() {
+  destroyMap();
+  state.score = 0; state.streak = 0; state.bestStreak = 0; state.round = 0;
+  generateQuestions();
+  renderQuestion();
+}
+
+startGame();
+</script>
+</body>
+</html>
